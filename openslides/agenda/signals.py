@@ -42,6 +42,29 @@ def setup_agenda_config_page(sender, **kwargs):
             required=False,
             label=ugettext_lazy('Begin of event'),
             help_text=ugettext_lazy('Input format: DD.MM.YYYY HH:MM')))
+    agenda_enable_auto_numbering = ConfigVariable(
+        name='agenda_enable_auto_numbering',
+        default_value=False,
+        form_field=forms.BooleanField(
+            label=ugettext_lazy('Enable automatic numbering'),
+            required=False))
+    agenda_number_prefix = ConfigVariable(
+        name='agenda_number_prefix',
+        default_value='',
+        form_field=forms.CharField(
+            widget=forms.TextInput(),
+            label=ugettext_lazy('Numbering prefix'),
+            required=False))
+    agenda_numeral_system = ConfigVariable(
+        name='agenda_numeral_system',
+        default_value='a',
+        form_field=forms.ChoiceField(
+            widget=forms.Select(),
+            required=False,
+            label=ugettext_lazy('Numeral System for Top items'),
+            choices=[
+                ('a', ugettext_lazy('arabic')),
+                ('r', ugettext_lazy('roman'))]))
 
     extra_stylefiles = ['styles/timepicker.css', 'styles/jquery-ui/jquery-ui.custom.min.css']
     extra_javascript = ['javascript/jquery-ui.custom.min.js',
@@ -53,7 +76,10 @@ def setup_agenda_config_page(sender, **kwargs):
                       url='agenda',
                       required_permission='config.can_manage',
                       weight=20,
-                      variables=(agenda_start_event_date_time,),
+                      variables=(agenda_start_event_date_time,
+                                 agenda_enable_auto_numbering,
+                                 agenda_number_prefix,
+                                 agenda_numeral_system),
                       extra_context={'extra_stylefiles': extra_stylefiles,
                                      'extra_javascript': extra_javascript})
 

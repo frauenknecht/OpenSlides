@@ -10,6 +10,8 @@
     :license: GNU GPL, see LICENSE for more details.
 """
 
+import string
+
 from datetime import datetime
 
 from django.db import models
@@ -21,10 +23,13 @@ from mptt.models import MPTTModel, TreeForeignKey
 from openslides.utils.exceptions import OpenSlidesError
 from openslides.config.api import config
 from openslides.projector.projector import SlideMixin
-from openslides.projector.api import (
-    register_slidemodel, get_slide_from_sid, register_slidefunc)
+from openslides.projector.api import get_slide_from_sid
 from openslides.utils.person.models import PersonField
 
+import roman
+
+import logging
+logger = logging.getLogger(__name__)
 
 class Item(MPTTModel, SlideMixin):
     """
@@ -53,7 +58,12 @@ class Item(MPTTModel, SlideMixin):
 
     comment = models.TextField(null=True, blank=True, verbose_name=ugettext_lazy("Comment"))
     """
-    Optional comment to the agenda item. Will not be shoun to normal users.
+    Optional comment to the agenda item. Will not be shown to normal users.
+    """
+
+    additional_item = models.BooleanField(default=False, verbose_name=ugettext_lazy("Additional item"))
+    """
+    Indicates whether this item has been added after agenda is already fixed.
     """
 
     closed = models.BooleanField(default=False, verbose_name=ugettext_lazy("Closed"))
@@ -127,12 +137,94 @@ class Item(MPTTModel, SlideMixin):
         """
         return _(self.get_related_type().capitalize())
 
+
+    def get_item_no(self):
+        """
+        :return: the number of this agenda item
+        """
+        if self.additional_item:
+            prev_sibling = self._get_prev_sibling(lambda add_item: add_item == False)
+        else:
+            prev_sibling = self._get_prev_sibling(lambda add_item: add_item == True)
+
+        if self.additional_item and prev_sibling is not None:
+            item_no = self._number_to_letter(self._count_siblings(lambda add_item: add_item == True) +1)
+        else:
+            self.additional_item = False
+            item_no = self._count_siblings(lambda add_item: add_item == False) +1
+
+        if self.is_root_node():
+            if config['agenda_numeral_system'] == 'a':
+                if self.additional_item:
+                    return '%s%s' % (prev_sibling.get_item_no(), item_no)
+                else:
+                    return '%s' % item_no
+            else:
+                if self.additional_item:
+                    return '%s%s' % (prev_sibling.get_item_no(), item_no)
+                else:
+                    return '%s' % roman.toRoman(item_no)
+        else:
+            if not self.additional_item:
+                return '%s.%s' % (self.parent.get_item_no(), item_no)
+            else:
+                if prev_sibling is None:
+                    return '%s.%s' % (self.parent.get_item_no(), item_no)
+                else:
+                    return '%s%s' % (prev_sibling.get_item_no(), item_no)
+
+
+    def _get_prev_sibling(self, filter_func):
+        prev_sibling = self.get_previous_sibling()
+        while not prev_sibling is None:
+            if prev_sibling.type == self.AGENDA_ITEM and filter_func(prev_sibling.additional_item):
+                return prev_sibling
+            prev_sibling = prev_sibling.get_previous_sibling()
+        return None
+
+    def _get_sibling_no(self):
+        """
+        :
+        """
+        prev_sibling = self.get_previous_sibling()
+        if self.additional_item and prev_sibling is not None:
+            sibling_no = self._count_siblings(lambda add_item: add_item == True) +1
+        else:
+            sibling_no = self._count_siblings(lambda add_item: add_item == False) +1
+
+
+    def _count_siblings(self, filter_func):
+        sibling_no = 0
+        prev_sibling = self.get_previous_sibling()
+        while not prev_sibling is None:
+            if prev_sibling.type == self.AGENDA_ITEM and filter_func(prev_sibling.additional_item):
+                sibling_no += 1
+            prev_sibling = prev_sibling.get_previous_sibling()
+        return sibling_no
+
+
+    def _number_to_letter(self, number):
+        """
+        Returns a lower case letter according to position in alphabet
+        E.g. 1 = a, 2 = b, ..., z = 26
+
+        :param number: a number between 1 and 26
+        :return: a letter from a to z. None, if number out of range
+        """
+        return string.lowercase[number - 1] if 0 < number < 27 else None
+
     def get_title(self):
         """
         return the title of this item.
         """
         if self.related_sid is None:
-            return self.title
+            if config["agenda_enable_auto_numbering"]:
+                if self.type == self.AGENDA_ITEM:
+                    return '%s %s %s' % (config['agenda_number_prefix'], self.get_item_no(), self.title)
+                else:
+                    return '%s' % self.title
+            else:
+                return self.title
         return self.get_related_slide().get_agenda_title()
 
     def get_title_supplement(self):
@@ -147,15 +239,12 @@ class Item(MPTTModel, SlideMixin):
             return '(%s)' % self.print_related_type()
 
     def slide(self):
-        """
-        Return a map with all Data for the Slide
-        """
         if config['presentation_argument'] == 'summary':
             data = {
                 'title': self.get_title(),
                 'items': self.get_children(),
                 'template': 'projector/AgendaSummary.html',
-            }
+                }
         elif config['presentation_argument'] == 'show_list_of_speakers':
             speakers = Speaker.objects.filter(time=None, item=self.pk).order_by('weight')
             old_speakers = Speaker.objects.filter(item=self.pk).exclude(time=None).order_by('time')
@@ -171,7 +260,10 @@ class Item(MPTTModel, SlideMixin):
                 'item': self,
                 'title': self.get_title(),
                 'template': 'projector/AgendaText.html',
-            }
+                }
+        """
+        Return a map with all Data for the Slide
+        """
         return data
 
     def set_closed(self, closed=True):
