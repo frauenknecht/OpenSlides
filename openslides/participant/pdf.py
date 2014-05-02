@@ -81,7 +81,7 @@ def participants_passwords_to_pdf(pdf, users=None):
     qrcode_wlan_draw = Drawing(45, 45)
     qrcode_wlan_draw.add(qrcode_wlan)
 
-    if not users:
+    if users is None:
         users = User.objects.all().order_by(sort)
 
     for user in users:
