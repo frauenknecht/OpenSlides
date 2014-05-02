@@ -197,8 +197,14 @@ class UserMultipleDeleteView(MultipleDeleteView):
         """
         Returns the question for the delete dialog.
         """
-        users = [unicode(str(object), 'utf-8') for object in self.objects]
-        user_names = ", ".join(users[:-1]) + (' ' + _('and') + ' ' if users[:-1] else '') + ''.join(users[-1:])
+        users = [unicode(object) for object in self.objects]
+        if len(users) > 1:
+            user_names = _("%s and %s") % (", ".join(users[:-1]), users[-1])
+        elif len(users) == 1:
+            user_names = users[0]
+        else:
+            user_names = ''
+
         return _('Do you really want to delete %s ?') % html_strong(user_names)
 
     def get_final_message(self):
@@ -239,7 +245,7 @@ class SetUserStatusView(SingleObjectMixin, RedirectView):
         return context
 
 
-class UserMultipleStatusToggleView(RedirectView, ObjectListMixin):
+class UserMultipleStatusToggleView(ObjectListMixin, RedirectView):
     """
     Activate or deactivate multiple users.
     """
