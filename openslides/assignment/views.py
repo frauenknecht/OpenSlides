@@ -3,6 +3,7 @@
 from django.contrib import messages
 from django.core.urlresolvers import reverse
 from django.shortcuts import redirect
+
 from django.utils.translation import ugettext as _
 from django.utils.translation import ungettext
 from reportlab.lib import colors
@@ -115,8 +116,14 @@ class AssignmentMultipleDeleteView(MultipleDeleteView):
         """
         Returns the question for the delete dialog.
         """
-        assignments = [unicode(str(object), 'utf-8') for object in self.objects]
-        assign_names = ", ".join(assignments[:-1]) + (' ' + _('and') + ' ' if assignments[:-1] else '') + ''.join(assignments[-1:])
+        assignments = [unicode(object) for object in self.objects]
+        if len(assignments) > 1:
+            assign_names = _("%s and %s") % (", ".join(assignments[:-1]), assignments[-1])
+        elif len(assignments) == 1:
+            assign_names = assignments[0]
+        else:
+            assign_names = ''
+
         return _('Do you really want to delete %s ?') % html_strong(assign_names)
 
     def get_final_message(self):
